@@ -77,6 +77,7 @@ class TrackerSumJob
                         tracker
                     WHERE
                         date_modified BETWEEN DATE_SUB(NOW(),INTERVAL 2 DAY) AND NOW()
+                        AND user_id IS NOT NULL
                 ) AS T
             GROUP BY
                 user_id,
