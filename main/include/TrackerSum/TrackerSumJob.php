@@ -2,62 +2,37 @@
 
 class TrackerSumJob
 {
-
-    protected $filelocation = 'custom/include/TrackerSum/TrackerSumConfig.php';
-
-    protected function getLastDate()
-    {
-        $lastDateFile = $this->getDateFromFile();
-        if (!empty($lastDate)) {
-            return $lastDate;
-        }
-        $lastDateCT = $this->getDateFromCustomTable();
-        if (!empty($lastDate)) {
-            return $lastDate;
-        }
-        $lastDateTT = $this->getDateFromTreackersTable();
-        if (!empty($lastDate)) {
-            return $lastDate;
-        }
-        return null;
-
-    }
-    protected function getDateFromFile()
-    {
-        $lastdate = null;
-        if (file_exists($this->filelocation)) {
-            require $this->filelocation;
-        }
-        return $lastdate;
-    }
-    protected function getDateFromCustomTable($sub_one_day = true)
-    {
-        $db = \DBManagerFactory::getInstance();
-        if ($sub_one_day) {
-            return $db->getOne("SELECT DATE(MAX(DATE_SUB(event_date, INTERVAL 1 DAY))) FROM ev_trackers_sum");
-        } else {
-            return $db->getOne("SELECT MAX(event_date) FROM ev_trackers_sum");
-        }
-    }
-    protected function getDateFromTreackersTable()
-    {
-        $db = \DBManagerFactory::getInstance();
-        return $db->getOne("SELECT DATE(MIN(date_modified)) FROM tracker");
-    }
-
     public function run()
     {
-        $date = '';
-        // $date = $this->getLastDate();
-        // if (!$date) {
-        //     return;
-        // }
-        $this->rewriteData($date);
-        // $this->dumpDataToFile($date);
+        $this->rewriteData();
     }
-    protected function rewriteData($data)
+    /**
+     *
+     * 'OAuthTokens', -- autoryzacja (klucze w przeglądarce)
+     * 'ev_PackageSubscriptions'  , -- nasze paczki pytanie o licencje
+     * 'SchedulersJobs',  -- tworzenie jednorazowych zadań np przy zapisie spotkania
+     * 'ActivityStream/Activities', -- aktywności sugara generowane na zapis
+     * 'ActivityStream/Subscriptions', -- aktywności sugara generowane na zapis
+     * 'ACLRoles', -- obsługa ról
+     * 'Administration',  -- administracja ??
+     * 'Dashboards', -- zmiana Dashboardów
+     * 'Filters' ,-- zapisanie filtrów
+     * 'Home' ,-- strona domowa (dashlety, i dashbordy na wejście do aplikacji )
+     * 'Import',  -- import rekordów
+     * 'Schedulers',  -- Harmonogramy w administracji
+     * 'UserPreferences', -- preferencje użytkowników np sposób wyświetlania waluty
+     * 'Users',  -- użytkownicy
+     * 'Charts', -- wykresy w systemie
+     * 'ReportMaker' , -- tworzenie reaportów
+     * 'Reports', -- wywoływanie raporów
+     * 'SugarFavorites',  -- dodanie rekordu do ulubionych (gwiwazdka przy rekordzie )
+     * 'Tags', -- tagi
+     * 'Teams', -- zespoły (administracja)
+     * 'Trackers'  -- śledzenie
+     */
+    protected function rewriteData()
     {
-        $data = strtotime($data);
+
         $query = "INSERT INTO
             ev_trackers_sum
                 SELECT
@@ -76,27 +51,28 @@ class TrackerSumJob
                     FROM
                         tracker
                     WHERE
-                        date_modified BETWEEN DATE_SUB(NOW(),INTERVAL 2 DAY) AND NOW()
+                        date_modified BETWEEN DATE_SUB(NOW(),INTERVAL 4 DAY) AND NOW()
+                        AND module_name NOT IN ('OAuthTokens','ev_PackageSubscriptions','SchedulersJobs',
+                        'ActivityStream/Activities','ActivityStream/Subscriptions','ACLRoles',
+                        'Administration','Dashboards','Filters',
+                        'Home','Import','Schedulers',
+                        'UserPreferences','Users','Charts',
+                        'SugarFavorites','Tags','Teams',
+                        'Trackers')
+                        AND action IN ('index', 'save', 'view', 'buildreportmoduletree', 'confirm')
                         AND user_id IS NOT NULL
                 ) AS T
             GROUP BY
                 user_id,
                 date_event
             ON DUPLICATE KEY UPDATE
-                first_event=VALUES(first_event),
-                last_event=VALUES(last_event),
-                counter=VALUES(counter)";
+                first_event=LEAST(VALUES(first_event),first_event),
+                last_event=GREATEST(VALUES(last_event),last_event),
+                counter=GREATEST(VALUES(counter),counter)
+                ";
+        // $data = strtotime($data);
         // -- date_modified BETWEEN '" . date("Y-m-d H:i:s", $data) . "' AND '" . date("Y-m-d H:i:s", $data + 86400) . "'
         $db = \DBManagerFactory::getInstance();
         $db->query($query);
-    }
-    protected function dumpDataToFile($date)
-    {
-        $date = strtotime($date) + 86400;
-        // $date = $this->getDateFromCustomTable(false);
-        file_put_contents($this->filelocation, '<?php
-
-        $lastdate=\'' . date("Y-m-d H:i:s", $date) . '\';
-        ');
     }
 }
